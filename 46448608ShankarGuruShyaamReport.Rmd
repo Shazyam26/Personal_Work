@@ -1,0 +1,429 @@
+---
+title: "46448608ShankarGuruShyaamReport"
+author: "Guru Shyaam Shankar"
+date: "`r Sys.Date()`"
+output: pdf_document
+toc: TRUE
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo=FALSE, results='hide', include=FALSE}
+library(demography)
+library(forecast)
+library(apc)
+library(StMoMo)
+library(splines)
+library(ggplot2)
+library(boot)
+library(Epi)
+```
+\newpage
+
+# Question 1
+
+### Background and History:
+An annuity can be dated back to ancient Rome, where individuals were offered a lump sum payment, then known as annua, in exchange for an annual payment. Within the modern world, annuities first gained popularity in the 1900s in the United States of America. USA citizens would purchase annuities as a means of providing income for retirees, in a short term loss and long term gain thinking.  
+
+### Today’s Modelling Problem:
+Annuities, have evolved from annua and the 1900s, and face many risks to insurance companies. A main risk for insurance companies is the longevity risk of individuals nowadays. With technological and medical advances in the modern world, life expectancy has risen as well as quality of life, so for a insurance company paying out income to retirees, who now live longer and therefore subsequently earn more income, the insurance company will lose. Another risk for insurance companies is the risk of inflation. In the current context, the cost of living crisis, rising inflation rates and a ineffective monetary policy from the RBA have driven down demand for annuities. Further, modeling how inflation affects annuity payouts and designing products that strike the right balance between protection and cost is a modeling challenge.
+
+### Product Description:
+With this in mind, it is with great pleasure that we are privileged to introduce our Guaranteed Lifetime Insurance Annuity. This will help combat the risks named above. Some features of the Guaranteed Lifetime Insurance Annuity:
+
+1. Lifetime Income: It's no secret that the main selling point of this product is that it pays out for life
+2. Single or Joint Life Options: The option to purchase an annuity tailored specifically to an individual or a couple.
+3. Tax Advantages: Tax-deferred growth can result in lower tax liabilities during the accumulation phase of the annuity.
+
+### Definition of Guaranteed Lifetime Insurance Annuity (GLIA):
+For an underwrite to sell a GLIA, there are several factors that they must first consider:
+
+1. Age: How old the applicant is will affect the premium and lump sum payment made:
+2. Gender: Females in Australia and many countries have a higher life expectancy. Furthermore, within Australia and many other countries there exists a positive sex ratio, i.e. there are more females than males in Australia. 
+3. Medical History: An applicant's medical history will affect how their life pans out. Factors such as smoking habits, exercise frequency, eating habits and diet will affect an applicant's health which will subsequently have an effect on the premium and lump sum payments made. 
+4. Financial Stability: An applicant should not be financially dependent on the annuity, in case of default. Furthermore, how likely is the applicant able to pay their premiums. 
+\newpage
+
+# Question 2
+### Part a
+We have obtained death and exposure data from the Human Mortality database. The information about the data is:
+- "type" of data is mortality data
+- "year" is the year of mortality data recorded from 1921 to 2020
+- "Age" is an individual aged x previous birthday ranging from age 0 to 110 years.
+- "Pop" is the population figures for female, male and total. This can represent the exposure to risk for us, and we will only concern ourselves with total for this report. 
+- "rate" is the rate of mortality for each male, female and total population and will generally range from 0-1, inclusive, except for some extremely high ages like 109 and 110 which can be > 1.
+```{r}
+#We have left this within its own chunk, as it takes time to load. 
+AusMort <- hmd.mx(country = "AUS", username = "shyaamshankarz@gmail.com", password = "NewPassword$2023")
+```
+### Part b
+```{r, echo=FALSE}
+Plot <- ggplot() + geom_line(aes(x = AusMort[["age"]], 
+                              y=log(AusMort[["rate"]][["total"]][,"2020"]))) + 
+  theme_bw() + labs(x= "Age [x]", y = "Log Mortality") + 
+  ggtitle("Total Population Log Mortality Curve in 2020") + 
+  theme(plot.title = element_text(hjust = 0.5))
+Plot   
+```
+
+### Part c 
+The plot above graphs those aged x against their respective log mortality rates in 2020. We have chosen to use the log of the mortality rates, as it better shows trends, especially in comparison to the pure mortality rates. As we can see the log mortality rates are significantly high at birth. From the Australian Institute of Health and Welfare, we are told that the main reasons for death in infants are perinatal conditions (53%), congenital anomalies (23%), symptoms, signs and abnormal findings, including Sudden Infant Death Syndrome (SIDS) (9.3%), which account for 86% of all deaths of infants across Sydney from 2015-17. From this, we can infer that infants are more susceptible to death than other age groups, this may be due to a poorer immune system compared to the other age groups. The log mortality rates still remain high for young kids, albeit decreasing. This is because children are more vulnerable to conditions and diseases that would not affect older ages to the same extent, such as Sudden Infant Death Syndrome (SIDS). Children of this age range do not hold the immune system that older ages possess, making them more susceptible to death. From the ages of late teen to young adults increases sharply, because they hold more responsibility and out and about in the open world. An example of this is young adults begin driving, which is considered normal but still holds a lot of risk. Further, we can see that log mortality rates increase linearly  from age 21. This is because more and more health conditions can affect individuals as they age. Further, adults are more susceptible to death from unnatural causes than kids. 
+\newpage
+
+# Question 3
+
+### Part a
+```{r, echo = FALSE}
+#Potential Knots from 5 to 95, differing by value of 10.
+everyknot <- c(5,15,25,35,45,55,65,75,85,95)
+#Store knot combinations here: as a list of length 1024. 
+#It is easier to store as a list, and will help us in further calculations. 
+knot_combinations <- vector(mode = "list", length = 1024)
+x <- 1
+#Set initial value, to start for statement
+for (i in 1:10){
+  vect <- combn(everyknot,i,simplify = FALSE)
+  #Combination of every knot
+  n <- length(vect)
+  for (k in 1:n){ #We need to store the combinations
+    knot_combinations[[x]] <- vect[[k]]
+    x <- x + 1
+  }
+}
+x
+#Here, we can see we now have 1024 models, which is what we wanted. 
+```
+```{r}
+boundary_knots <- vector(mode = "list",length = 1024)
+inside_knots <- vector(mode = "list",length = 1024)
+for (i in 1:length(knot_combinations)){
+  # If the knot combination has less than 3 elements, there are no boundary 
+  #knots. 
+  if (3 < length(knot_combinations[[i]])) {
+  #If the vector of potential knots is more than 3, 
+  #we know the minimum and maximum value will make up the boundary knots. 
+  #However, from the 2nd lowest to the 2nd maximum value, so we can write 2:n-1, 
+  #where the n is maximum value. 
+  boundary_knots[[i]] <- c(knot_combinations[[i]][1],knot_combinations[[i]]
+                           [length(knot_combinations[[i]])])
+  inside_knots[[i]] <- knot_combinations[[i]][2:length(knot_combinations[[i]])-1]
+}
+else if (3 == length(knot_combinations[[i]])){
+  #if the knot combination has 3 elements then, the boundary knots will be the 
+  #minimum and maximum value within the combination, and the inside knots are 
+  #just the remaining value. 
+  boundary_knots[[i]] <- c(knot_combinations[[i]][1],knot_combinations[[i]][3])
+  inside_knots[[i]] <- knot_combinations[[i]][2]
+} 
+else {
+  # If the knot combination has less than 3 elements, there are no boundary 
+  #knots. 
+  boundary_knots[[i]] <- c(0)
+  inside_knots[[i]] <- knot_combinations[[i]]
+} 
+}
+
+#We have covered the case of 1 knots to 10 knots, and a possibility of 1023 combinations, now we must consider when there are no knots as well:
+inside_knots[[1024]] <- c(0)
+```
+```{r}
+ages <- AusMort[["age"]]
+N <- length(ages)
+#Extract relevant data for 2018 and 2019, to fit as our calibration and validation data:
+log_mortality_rates_2018 <- log(AusMort$rate$total[,"2018"]) #Calibration
+log_mortality_rates_2019 <- log(AusMort$rate$total[,"2019"]) #Validation
+#We will also require the exposures
+total_exposures_2018 <- AusMort$pop$total[,"2018"]
+total_exposures_2019 <- AusMort$pop$total[,"2019"]
+#We will not define the loss function, and we will use this to find the 
+#correct combination by minimizing it later on, 
+loss_function_values <- c()
+#Store Fitted values here:
+fitted_values_list <- vector(mode = "list",length = 1024)
+#Optimal model is one with lowest loss score
+for (i in 1:1024){
+  #If 1 or 2 knots, basis has no boundary knots because there 
+  #are only inside knots
+  if (length(boundary_knots[[i]]) == 1){
+    nc_basis <- ns(ages, knots = inside_knots[[i]])
+  } else { #If 3 or more knots, we have boundary knots
+    nc_basis <- ns(ages, knots = inside_knots[[i]],
+                   Boundary.knots = c(boundary_knots[[i]][1],
+                                      boundary_knots[[i]][2]))
+  }
+  nc_spline <- lm(log_mortality_rates_2018 ~ nc_basis, 
+                  weights = total_exposures_2018)
+  fitted_values_list[[i]] <- nc_spline$fitted.values
+  SumSquares <- mean(sum((log_mortality_rates_2019 - fitted_values_list[[i]])^2))
+  loss_function_values[i] <- SumSquares
+}
+knot_combinations[[which.min(loss_function_values)]]
+#Now, we know that the boundary knots will be 5 and 75, and the inside knots 
+#will be 15, 25, 35, 45, 55 and 65.
+#Basis of Optimal Spline
+nc_basis_end <- ns(ages, knots = c(15, 25, 35, 45, 55, 65),Boundary.knots = c(5,75))
+#Fit Spline
+nc_spline_end <- lm(log_mortality_rates_2018 ~ nc_basis_end, weights = total_exposures_2018)
+#Obtain Fitted values
+nc_spline_fitted <- nc_spline_end$fitted.values
+```
+
+### Part b
+```{r}
+#Define iterative values of spar, we know that spar is between 0 and 1, and we will differ values by 0.0005, so that we can cover a larger range. 
+spar_values <- seq(0,1,by = 0.0005)
+#Store loss function values for smoothing spline here:
+loss_function_values_smoothing_spline <- c()
+g <- length(spar_values)
+h <- length(ages)
+fitted_values_matrix <- matrix(0,nrow = g, ncol = h)
+#Go through every single lambda values
+for (i in 1:g){
+  smoothing_spline <- smooth.spline(ages,log_mortality_rates_2018, 
+                                    spar = spar_values[i])
+  for (j in 1:h){
+    fitted_values_matrix[i,j] <- smoothing_spline$y[j]
+  }
+  SumSquares2 <- mean(sum((log_mortality_rates_2019 - fitted_values_matrix[i,])^2))
+  loss_function_values_smoothing_spline[i] <- SumSquares2
+  
+}
+#Minimal Loss function gives optimal model
+optimal_smooth_spline <- which(loss_function_values_smoothing_spline==
+                                 min(loss_function_values_smoothing_spline))
+#Fit Model
+optimal_smooth_spline_fitted <- fitted_values_matrix[optimal_smooth_spline,]
+``` 
+
+### Part c
+```{r}
+#We need 2020 data
+log_mortality_rates_2020 <- log(AusMort$rate$total[,"2020"])
+#Function to compute loss of Out of Sample performance
+OutOfSampleTest <- function(fitted, external.sample, dimension = N){
+  #sum of squares
+  SumSquares3 <- mean(sum((external.sample - fitted)^2))
+  return(SumSquares3)
+}
+#Natural cubic spline Loss
+loss_value_cubic_spline <- OutOfSampleTest(fitted = nc_spline_fitted, external.sample = log_mortality_rates_2020)
+#Smoothing spline loss
+loss_value_smooth_spline <- OutOfSampleTest(fitted = optimal_smooth_spline_fitted, external.sample = log_mortality_rates_2020)
+losses <- data.frame(NCS = loss_value_cubic_spline, SMOOTHING = loss_value_smooth_spline)
+losses
+plotsplines <- plot(ages,log_mortality_rates_2020, main = "Log Mortality Rates against Graduated Spline Fits", xlab ="Age [x]", ylab = "Log[Mortality Rates]")
+lines(ages,nc_spline_fitted,col="blue")
+lines(ages,optimal_smooth_spline_fitted,col="orange")
+legend("bottomright", legend = c("Natural Cubic Spline", "Smoothing Spline"), lty = 1, col = c("blue","orange"))
+#Despite, similar visual fits, we shall choose the smoothing spline due to a lower out of sample test. 
+smooth_spline_2019 <- smooth.spline(ages,log_mortality_rates_2019, spar = spar_values[optimal_smooth_spline])
+optimal_model_2019 <- smooth_spline_2019$y
+```
+
+### Part d
+```{r}
+exposure_2019 <- AusMort$pop$total[,"2019"]
+mx_2019 <- AusMort$rate$total[,"2019"]
+dx_2019 <- exposure_2019 * mx_2019 #these are expected values, we aren't given the dx values
+smooth_spline_mx_2019 <- exp(optimal_model_2019)
+#Standardized deviations, let zx be the standard deviation
+smooth_spline_zx <- (dx_2019 - exposure_2019 * smooth_spline_mx_2019)/sqrt(exposure_2019 * smooth_spline_mx_2019)
+chi.squared.test <- function(Observed, Expected, no.of.params, alpha = 0.05){
+  df <- length(Observed) - no.of.params
+  critical.value <- qchisq(1 - alpha, df) 
+  test.statistic <- sum((Observed - Expected)^2 / Expected) 
+  p.value <- pchisq(test.statistic, df, lower.tail = FALSE) 
+  results <- data.frame(Statistic = test.statistic, Critical.Value = critical.value, df = df, P.Value = p.value)
+}
+expected_observation <- exposure_2019*smooth_spline_mx_2019
+params <- smooth_spline_2019$df
+chi.squared.graduation.test <- chi.squared.test(Observed = dx_2019, Expected = expected_observation, no.of.params = params)
+chi.squared.graduation.test
+#here we can see that the code shows how the P-Value is very low, so we can reject the null hypothesis and conclude that the mortality rates do not align with graduation rates obtained
+#Standardized Deviations Test Function
+st.dev.test <- function(zx, breaks = c(-Inf,-3, -1, 0, 1,3 ,Inf)){
+  observed <- table(cut(zx, breaks))
+  expected.p <- diff(pnorm(breaks))
+  test <- chisq.test(observed, p = expected.p)
+  d.o.f <- length(breaks) - 2
+  return(data.frame(Statistic = test$statistic, df = d.o.f, 
+                    P.value = test$p.value))
+}
+st.dev.grad.test <- st.dev.test(smooth_spline_zx)
+st.dev.grad.test$P.value
+#Again, the P-Value here is extremely low, so we can reject the null hypothesis.
+```
+
+```{r}
+signs.test.1 <- function(st.deviations, m){
+  a <- binom.test(sum(st.deviations >0), m)
+  stat <- a$statistic
+  trials <- a$parameter
+  success.p <- a$estimate
+  p.val <- a$p.value
+  res <- data.frame(Statistic = stat, Trials = trials, Success.P = success.p, P.Value = p.val)
+  return(res)
+}
+signs.test <- signs.test.1(st.deviations = smooth_spline_zx, m = length(ages))
+signs.test$P.Value
+#Here the P-Value is large, so we can accept the null hypothesis
+#Cumulative Deviations Test
+cum.dev.test <- function(Ac, Ex, alpha = 0.05){
+  z.score <- qnorm(1 - alpha/2) #Z value from N(0,1)
+  cum.dev <- sum(Ac - Ex) / sqrt(sum(Ex)) #From formula
+  p.value <- 2 *(pnorm(abs(cum.dev), lower.tail = FALSE)) 
+  #Store in data frame so easier to view
+  res <- data.frame(Statistic = cum.dev, Critical.Val = z.score, P.Value = p.value)
+  return(res)
+}
+cdt <- cum.dev.test(Ac = dx_2019, Ex = exposure_2019*smooth_spline_mx_2019)
+cdt$P.Value
+#The P-Value here is large, so we can accept the null hypothesis.
+#Grouping of Signs Test
+g.o.s.test <- function(zx, alpha = 0.05){
+  #Positive or Negative Deviations 
+  signs <- sign(zx)
+  #No. of + signs
+  n1 <- sum(signs == 1)
+  #No. of - signs
+  n2 <- sum(signs == -1)
+  y <- c(-1, sign(zx))
+  G <- sum((y[-1] != y[-(n1 + n2 + 1)]) & y[-1] != -1) 
+  #Approximate normally
+  mu <- n1 * (n2 + 1) / (n1 + n2)
+  sigma.sq <- (n1 * n2)^2 / (n1 + n2)^3
+  #Critical value
+  G_alpha <- qnorm(alpha, mean = mu, sd = sqrt(sigma.sq))
+  #p.value
+  p.value <- (pnorm(G + 0.5, mean = mu, sd = sqrt(sigma.sq)))
+  res <- data.frame(Statistic = G, Critical.Val = G_alpha, P.Value = p.value)
+  return(res)
+  #list(statistic = G, c.value = G_alpha, p.value = p.value)
+}
+
+g.o.s.test.1 <- g.o.s.test(zx = smooth_spline_zx)
+g.o.s.test.1$P.Value
+#The P-Value here is large, so we can accept the null hypothesis
+```
+
+### Part e
+Thus, we know the data has accepted the null hypothesis under the grouping of signs test, cumulative deviations test and the signs test, but reject the null hypothesis under the chi square and standard deviations tests. This tells us that we can't detect bias
+
+\newpage
+
+# Question 4
+### Part a
+The Lee-Carter Model is a model used in modelling mortality rates over time. The Lee-Carter Model is generally expressed as $\ln (m_{x,t}) = \alpha_{x} + \beta_{x}\kappa_{t} + \epsilon_{x,t}$. The $m_{x,t}$ represents the central mortality rate for age group x at time t. The $\alpha_{x}$ is the general shape of the mortality for age group x,  $\kappa_{t}$ is the trend for time t across all ages,  $\beta_{x}$ is the change in mortality in response to time trend $\kappa_{t}$, $\epsilon_{x,t}$ is the error term which is independently distributed normally (this is generally estimated). The Lee Carter model is able to split the central mortality rate into its age and time effects.
+
+The Age Period Cohort Model is a model also used in modelling mortality rates over time, and can be seen as an extension of the Lee-Carter Model. The Age Period Cohort Model can be generally expressed as $\ln (m_{x,t}) = \alpha_{x}+\beta^{(1)}_{x}\kappa_{t}+\beta^{(2)}_{x} \gamma_{t-x}+\epsilon_{x,t}$.  The $\beta^{(2)}_{x}$  can be viewed as the beta from the Lee-Carter model above, i.e. it measures the age-specific effect of the $\gamma_{t-x}$ term. However, the $\gamma_{t-x}$ can be calibrated and forecasted in a similar way to $\kappa_{t}$. 
+
+The main advantage the Age Period Cohort Model has over the Lee-Carter Model is that it does contain a cohort term. A disadvantage of both models is that they both assume that $\alpha_{x}$ and $\beta_{x}$ will remain constant over time, when this can be shown empirically over many cases to be not true. 
+
+To ensure unique parameter values for the Lee-Carter Model, we also require the constraints:
+\[\sum_{x} \beta_{x} = 1, \ \ \sum_{t} \kappa_{t} = 0 \].
+
+### Part b
+```{r}
+LC <- lc(link = "logit")
+AUSdata <- StMoMoData(AusMort, series = "total")
+#We'll fit the model for ages 0
+LCfit <- fit(LC, data = AUSdata, ages.fit = 0:100, years.fit = 1921:2019)
+```
+
+```{r}
+#One more step is needed to convert exposures from central to initial 
+#exposures to fit an Age Period Cohort Model
+Ausdata.centralexposure <- central2initial(AUSdata)
+APC <- apc(link = "logit")
+#Fitting the Model for ages 0:100 for years 1921:2019
+APCFit <- fit(APC, data = Ausdata.centralexposure, ages.fit = 0:100, years.fit = 1921:2019)
+```
+### Part c
+```{r}
+LCforecast <- forecast(LCfit, h = 1)
+LC.2020.prediction <- log(t(LCforecast$rates))
+observed.rate.2020 <- log(AusMort$rate$total[,"2020"][0:101])
+MTE.LC <- (sum((observed.rate.2020-LC.2020.prediction)^2))/length(LC.2020.prediction)
+MTE.LC
+APCforecast <- forecast(APCFit, h = 1)
+APC.2020.prediction <- log(t(APCforecast$rates))
+MTE.APC <- (sum((observed.rate.2020-APC.2020.prediction)^2))/length(APC.2020.prediction)
+MTE.APC
+Errors <- data.frame(Lee.Carter = MTE.LC, APC = MTE.APC)
+Errors
+```
+### Part d
+```{r}
+plot(LCfit)
+plot(APCFit)
+```
+From the Lee-Carter Model plot, we can interpret that $\alpha_{x}$ will give us the general shape of the mode. The $\kappa_{t}$ shows the decline in mortality over time, and from the plot above we can see that around 1970s mortality decreased sharply. The $\beta_{x}$ shows at which age, mortality is increasing at a faster rate, from this plot we can see that at youth the mortality increases sharply, as well as around age 90. 
+
+From the Age Period Cohort Model plot, we can interpret $\alpha_{x}$ the same as in the Lee-Carter Model, i.e. mortality will decrease over time. We know that both $\beta^{(1)}_{x}$ and $\beta^{(2)}_{x}$ stay constant over time, therefore the $\gamma_{t-x}$ is only affected by period
+
+One shortcoming of the Age Period Cohort Model is that the cohort term is linearly dependent on the age and period terms which can make it hard to identify. Further, an abudance of data is required to implement cohort models properly. 
+
+\newpage
+
+
+# Question 5
+
+### Part a
+```{r}
+LeeCarter2033 <- forecast(LCfit, h = 14)
+LeeCarter2053 <- forecast(LCfit, h = 34)
+LeeCarter2073 <- forecast(LCfit, h = 54)
+plot(LeeCarter2073, only.kt = T) 
+APC2033 <- forecast(APCFit, h = 14)
+APC2053 <- forecast(APCFit, h = 34)
+APC2074 <- forecast(APCFit, h = 54)
+plot(APC2074, only.gc = T) 
+```
+
+
+### Part b
+We only need to plot the $\kappa_{t}$ for Lee-Carter Models as it is the only parameter to be affected when forecasting. In the Age Period Cohort Model, $\kappa_{t}$ and $\gamma_{t-x}$ are the only parameters to change, but $\kappa_{t}$ will be covered in the Lee-Carter Model anyway. 
+
+From the Lee-Carter Model we can forecast mortality rates to decrease, or continue decreasing. This will affect GLIA, because when mortality drops GLIA's become more attractive for consumers. From an insurer's perspective GLIA offers higher payments out to retirees. 
+
+From the Age Period Cohort Model, the cohort model can both increase and decrease. Showing that mortality is unpredictable and unspecific to age or period. 
+
+### Part c
+Additional data, to better show the cohort factor could've been produced. 
+
+\newpage
+
+
+# Question 6:
+```{r}
+NZMort <- hmd.mx(country = "NZL_NP", username = "shyaamshankarz@gmail.com", password = "NewPassword$2023")
+```
+```{r, echo=FALSE}
+#We can use the StMoMo package 
+NZ_LC <- lc(link = "logit")
+NZdata <- StMoMoData(NZMort, series = "total")
+#We'll fit the model for ages 0
+NZ_LCfit <- fit(NZ_LC, data = NZdata, ages.fit = 0:100, years.fit = 1948:2019)
+```
+
+```{r, echo=FALSE, results='hide', warning=FALSE}
+#One more step is needed to convert exposures from central to initial 
+#exposures to fit an Age Period Cohort Model
+NZdata.centralexposure <- central2initial(NZdata)
+NZ_APC <- apc(link = "logit")
+#Fitting the Model for ages 0:100 for years 1921:2019
+NZ_APCFit <- fit(NZ_APC, data = NZdata.centralexposure, ages.fit = 0:100, years.fit = 1948:2019)
+```
+```{r}
+plot(NZ_LCfit)
+plot(NZ_APCFit)
+```
+We can use New Zealand data, to model our GLIA, due to the close proximity between the two countries, or we could expand our market to Australia and New Zealand. I have chosen to use the Total Population as I do not believe Maori ancestry or gender to affect the dataset. 
+
+# References:
+Lecture Slides      
+Tutorials
+https://www.youtube.com/watch?v=prk-0G689GU
+https://www.aihw.gov.au/reports/children-youth/australias-children/contents/health/infant-child-deaths
+
