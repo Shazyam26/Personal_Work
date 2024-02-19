@@ -1,0 +1,132 @@
+---
+title: "ACST3061 Assignment 1 - Guru Shyaam Shankar 46448608"
+output: 
+  pdf_document: 
+    toc: yes
+---
+
+Load the data set into R and the necessary packages
+```{r}
+set.seed(10)
+insurance <- read.csv("/Users/shyaamshankar/Desktop/Assignment1_Dataset2023.csv")
+library(tinytex)
+library(rmarkdown)
+```
+
+# **Question 1**
+View the summary statistics of the covariates
+```{r}
+names(insurance)
+summary(insurance[, c("Counts", "gender", "distance", "age", 
+                      "carage", "exposure")])
+```
+The covariates are gender, distance (distance car has been driven), age, car age and exposure. 
+We can see that there is a large data set with brand new cars and old cars and young drivers to elderly drivers. There were more males than female drivers. The average age was 47.25, and the average car age was 7.762 meaning that the average person was middle aged, more likely than not a male and had bought a car within the previous decade.
+
+Create histograms of the covariates:
+```{r}
+par(mfrow = c(2, 3))
+hist(insurance$distance, main = "Histogram of Distance", 
+     xlab = "Distance", ylab = "Counts", col = "red")
+hist(insurance$age, main = "Histogram of Age", 
+     xlab = "Age", ylab = "Counts", col = "orange")
+hist(insurance$carage, main = "Histogram of Car Age", 
+     xlab = "Car Age", ylab = "Counts", col = "green")
+hist(insurance$exposure, main = "Histogram of Exposure", 
+     xlab = "Exposure", ylab = "Counts", col = "blue")
+```
+The histograms of distance, age, car age and exposure are shown above. It didn't make sense to create histogram of gender nor counts. This is because there were only 2 responses to gender, male or female so a histogram for gender wouldn't make sense. 
+
+# **Question 2**
+Fit GLM with all covariates, and view the estimated regression coefficients. 
+```{r}
+model1 <- glm(Counts ~ gender + distance + age + carage + offset(log(exposure)), 
+              data = insurance, family = poisson(link = "log"))
+summary(model1)
+```
+From the GLM model above, we can see that all the covariates are significant at the 5% level, as the P-Values are all less than 0.05. 
+
+# **Question 3**
+Now for the GLM Model 2 without age:
+```{r}
+insurance$ln_exposure <- log(insurance$exposure)
+model2 <- glm(Counts ~ gender + distance + carage + offset(ln_exposure), 
+              data = insurance, family = poisson(link = "log"))
+
+summary(model2)
+```
+All the covariates are significant at the 5% level, because the P-Value is less than 0.05. 
+
+Now we should conduct a likelihood ratio test, to compare the two models. It is important to note that the only difference between the two models is that Model 2 does not incorporate the co-variate 'age'. 
+```{r}
+lrtest <- anova(model1, model2, test = "Chisq")
+lrtest
+dev_1 <- deviance(model1)
+dev_2 <- deviance(model2)
+df <- df.residual(model2) -df.residual(model1)
+df
+t_stat <- 2*(dev_2 - dev_1)
+t_stat
+p_val <- pchisq(t_stat, df, lower.tail = FALSE)
+p_val
+```
+
+From the likelihood ratio test, we should conduct an anova of the two models. The null hypothesis H_0: Model 2 is sufficient. The P-Value is extremely small indicating that, we have enough evidence to reject the null hypothesis, and conclude that Model 1 is a better model. We can further test using deviances. The P-Value is less than 0.05 from deviances, so we can conclude that Model 1 is better than Model 2. 
+
+# **Question 4**
+First, we need to take the first 1000 observations and create a new data set so we can look at that closer. We'll use Model 1 stated earlier as we concluded that as the better model earlier. 
+```{r}
+insurance$ln_exposure <- log(insurance$exposure)
+subset_data <- insurance[1:1000,]
+model3 <- glm(Counts ~ gender + distance + age + carage + offset(ln_exposure), 
+             data = subset_data, family = poisson(link = "log"))
+summary(model3)
+resid_model1 <- resid(model3, type = "deviance")
+```
+
+From, the summary alone, we can see that the covariates, gender and distance are insignificant at the 5% level, as they all have a P-Value greater than 0.05. However, the car age  and age co-variate is significant.
+```{r}
+hist(resid_model1, xlab = "Residuals", 
+     main = "Residual Model 1 Histogram", col = "blue")
+```
+
+The histogram is heavily right skewed, indicating that the normality assumption is violated.
+```{r}
+qqnorm(resid_model1); qqline(resid_model1)
+```
+
+Further, the qqnorm plot does not lie on the diagonal which clearly violates the normality assumption.
+```{r}
+plot(fitted(model3), resid_model1, ylab = "Deviance Residuals", 
+     xlab = "Fitted Values", main = "Residual Plot")
+```
+
+The Residual Plot clearly has a pattern, indicating that the homeskedasticity is violated. Thus, we can conclude that Model 3 is an inaccurate model and an invalid model. 
+
+\pagebreak
+# **Question 5**
+Given, that we are conducting multiple linear regression, we need to use an 'lm' model. 
+```{r}
+model4 <- lm(log(exposure) ~ gender + distance + age + carage, data = subset_data)
+summary(model4)
+resid_model2 <- resid(model4)
+```
+
+Above, we can see that none of the co variate are significant at the 5% level, because the P-Values are all less than 0.05 for all the covariates.
+```{r}
+hist(resid_model2, xlab = "Residuals", 
+     main = "Residual Model 2 Histogram", col = "green")
+```
+
+Given, that the histogram is somewhat symmetrical and bell-shaped, there is strong evidence that the normality assumption is met.
+```{r}
+qqnorm(resid_model2); qqline(resid_model2)
+```
+
+Additionally, the qqnorm plot falls along the diagonal indicative that the normality assumption is met.
+```{r}
+plot(fitted(model4), resid_model2, ylab = "Deviance Residuals", 
+     xlab = "Fitted Values", main = "Residual Plot")
+```
+
+The Residual Plot is random, and shows no clear pattern showing that there is evidence of present homoskedasticity. Thus, we can conclude from residual analysis that Model 4 is a valid and accurate model. 
