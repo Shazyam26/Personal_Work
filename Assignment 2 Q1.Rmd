@@ -1,0 +1,76 @@
+---
+title: "Assignment 2 Q1"
+author: "Guru Shyaam Shankar"
+date: "24/10/2021"
+output: pdf_document
+---
+```{r}
+
+#Question 1:
+
+
+Hospital_Time <- read.csv("/Users/shyaamshankar/Downloads/Hospital_time.csv", header = TRUE)
+
+#Now we need to filter the csv file so we can read the csv files individually for 
+#every Hospital,  to compare their Waiting Times. We know that the sample size is 14 
+#for every Hospital, and is represented by the nrow function. 
+
+
+Hospital_A <- dplyr::filter(Hospital_Time, Hospital=="Hospital A")
+print(Hospital_A)
+sd(Hospital_A$Waiting.time)
+mean(Hospital_A$Waiting.time)
+nrow(Hospital_A)
+
+Hospital_B <- dplyr::filter(Hospital_Time, Hospital=="Hospital B")
+print(Hospital_B)
+sd(Hospital_B$Waiting.time)
+mean(Hospital_B$Waiting.time)
+nrow(Hospital_B)
+
+Hospital_C <- dplyr::filter(Hospital_Time, Hospital=="Hospital C")
+print(Hospital_C)
+sd(Hospital_C$Waiting.time)
+mean(Hospital_C$Waiting.time)
+nrow(Hospital_C)
+
+
+#Now we plot the boxplot for the Waiting Times and their respective Hospitals.
+
+boxplot(Waiting.time ~ Hospital, data = Hospital_Time, 
+        ylab = "Waiting Times", main = "Waiting Times for Hospitals")
+
+#From the boxplot we can see that the data is suitable for an ANOVA test, as it tests 
+#response to a treatment. 
+
+Hospital_Time.aov <- aov(Waiting.time ~ Hospital, data = Hospital_Time)
+anova(Hospital_Time.aov)
+
+#Therefore since P-Value < 0.05, we reject H0, that is to say we have sufficient 
+#evidence to state that one of the means is different to the others. 
+
+qqnorm(Hospital_Time.aov$residuals)
+qqnorm(Hospital_Time.aov$fitted.values)
+plot(Hospital_Time.aov$fitted.values, Hospital_Time.aov$residuals)
+
+
+resid(Hospital_Time.aov)
+qqnorm(resid(Hospital_Time.aov))
+
+
+#Since it is linear, we can see the residuals are normally distributed, and thus it is a valid model. 
+
+bartlett.test(Waiting.time ~ Hospital, data = Hospital_Time)
+#Since P-Value is small, we cannot conlude that there are same variances. 
+#We can further prove this as max standard deviation is Hospital A with 33, and 
+#minimum standard deviation is Hospital C with 16. Therefore the ratio is greater than 2 
+#so it is not feasible to say it is the same variances. 
+
+
+kruskal.test(Waiting.time ~ Hospital, Hospital_Time)
+#Therefore, we can decisively conclude to reject the null hypothesis, as P-Value < 
+#0.05, and that one of the means is different to the others. Thus, we reject the null 
+#hypothesis under the kruskal test and the ANOVA test.
+```
+
+
